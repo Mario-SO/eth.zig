@@ -349,20 +349,16 @@ fn calculateTypedFieldsLength(tx: anytype) usize {
 /// Serialize a typed transaction (EIP-2930/1559/4844) for signing.
 /// Returns: type_byte ++ RLP([fields...])
 fn serializeTypedForSigning(allocator: std.mem.Allocator, type_byte: u8, tx: anytype) ![]u8 {
-    // Pre-calculate total size for single allocation
+    // Calculate exact payload length, then write directly into final buffer.
     const payload_len = calculateTypedFieldsLength(tx);
     const total = 1 + rlp.lengthPrefixSize(payload_len) + payload_len;
-
     const buf = try allocator.alloc(u8, total);
     errdefer allocator.free(buf);
 
-    // Write type byte
     buf[0] = type_byte;
     var pos: usize = 1;
-    // Write RLP list header
     pos += rlp.writeLengthDirect(buf[pos..], payload_len, 0xc0);
-    // Write fields directly into buffer
-    pos += writeTypedFieldsDirect(buf[pos..], tx);
+    _ = writeTypedFieldsDirect(buf[pos..], tx);
 
     return buf[0..total];
 }

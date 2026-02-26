@@ -1,6 +1,8 @@
 use alloy_bench::*;
-use alloy_primitives::{keccak256, Address, U256};
+use alloy_primitives::{keccak256, Address, U256, Uint};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+type U512 = Uint<512, 8>;
 
 // ================================================================
 // 1. Keccak256 benchmarks
@@ -292,6 +294,41 @@ fn bench_u256(c: &mut Criterion) {
             let denominator = black_box(reserve_in) * U256::from(1000) + amount_in_with_fee;
             let amount_out = numerator / denominator;
             black_box(amount_out);
+        })
+    });
+
+    // mulDiv: (a * b) / c with full 512-bit intermediate (FullMath.mulDiv)
+    group.bench_function("mulDiv", |b| {
+        let liquidity = ONE_ETH;
+        let sqrt_price = U256::from_limbs([0, 79228162514264337593543950336u128 as u64, (79228162514264337593543950336u128 >> 64) as u64, 0]);
+        let denom = ONE_ETH + U256::from(1_000_000u64);
+        b.iter(|| {
+            // True 512-bit intermediate: widen to U512, multiply, divide, narrow back
+            let a = U512::from(black_box(liquidity));
+            let b_val = U512::from(black_box(sqrt_price));
+            let d = U512::from(black_box(denom));
+            let result = U256::from((a * b_val) / d);
+            black_box(result);
+        })
+    });
+
+    // UniswapV4 getNextSqrtPriceFromAmount0RoundingUp (simplified non-overflow path).
+    // Values are chosen so that product = amount_in * sqrt_price (~7.9e43) and
+    // denominator = liquidity + product (~7.9e43) both fit in u256 without overflow,
+    // so checked arithmetic is unnecessary here. The benchmark measures the hot path
+    // that real swaps hit for typical pool parameters.
+    group.bench_function("uniswap_v4_swap", |b| {
+        let liquidity = ONE_ETH;
+        let sqrt_price = U256::from_limbs([0, 79228162514264337593543950336u128 as u64, (79228162514264337593543950336u128 >> 64) as u64, 0]);
+        let amount_in = U256::from(1_000_000_000_000_000u64);
+
+        b.iter(|| {
+            let product = black_box(amount_in) * black_box(sqrt_price);
+            let denominator = black_box(liquidity) + product;
+            // True 512-bit intermediate for numerator (liquidity * sqrt_price)
+            let num = U512::from(black_box(liquidity)) * U512::from(black_box(sqrt_price));
+            let next_sqrt_price = U256::from(num / U512::from(denominator));
+            black_box(next_sqrt_price);
         })
     });
 

@@ -9,26 +9,42 @@ pub const GWEI: u256 = 1_000_000_000;
 /// 1 Wei = 1
 pub const WEI: u256 = 1;
 
+const ETHER_F64: f64 = 1_000_000_000_000_000_000.0;
+const GWEI_F64: f64 = 1_000_000_000.0;
+const TWO_POW_128_F64: f64 = 340282366920938463463374607431768211456.0;
+
+fn u256ToF64(value: u256) f64 {
+    const lo: u128 = @truncate(value);
+    const hi: u128 = @truncate(value >> 128);
+    return @as(f64, @floatFromInt(hi)) * TWO_POW_128_F64 + @as(f64, @floatFromInt(lo));
+}
+
+fn f64ToU256Trunc(value: f64) u256 {
+    const hi_f = @floor(value / TWO_POW_128_F64);
+    const lo_f = value - (hi_f * TWO_POW_128_F64);
+    const hi: u128 = @intFromFloat(hi_f);
+    const lo: u128 = @intFromFloat(lo_f);
+    return (@as(u256, hi) << 128) | @as(u256, lo);
+}
+
 /// Convert ether (as f64) to wei (u256).
 pub fn parseEther(ether: f64) u256 {
-    const wei_f = ether * @as(f64, @floatFromInt(ETHER));
-    return @intFromFloat(wei_f);
+    return f64ToU256Trunc(ether * ETHER_F64);
 }
 
 /// Convert gwei (as f64) to wei (u256).
 pub fn parseGwei(gwei: f64) u256 {
-    const wei_f = gwei * @as(f64, @floatFromInt(GWEI));
-    return @intFromFloat(wei_f);
+    return f64ToU256Trunc(gwei * GWEI_F64);
 }
 
 /// Convert wei to ether (as f64). May lose precision for very large values.
 pub fn formatEther(wei: u256) f64 {
-    return @as(f64, @floatFromInt(wei)) / @as(f64, @floatFromInt(ETHER));
+    return u256ToF64(wei) / ETHER_F64;
 }
 
 /// Convert wei to gwei (as f64). May lose precision for very large values.
 pub fn formatGwei(wei: u256) f64 {
-    return @as(f64, @floatFromInt(wei)) / @as(f64, @floatFromInt(GWEI));
+    return u256ToF64(wei) / GWEI_F64;
 }
 
 // Tests
